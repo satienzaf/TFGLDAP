@@ -21,7 +21,7 @@ result_pattern = r'conn=(\d+) op=(\d+) RESULT tag=\d+ err=(\d+) text=(.*)'
 
 
 # Archivo de log
-log_file = "ldap.log"
+log_file = "/var/log/ldap/ldap.log"
 
 # Obtener el año actual
 current_year = datetime.now().year
@@ -132,4 +132,4 @@ def save_connections(connections, output_file):
 
 # Procesar el log y guardar la información de las conexiones
 connections = process_log(log_file)
-save_connections(connections, "ldap_sessions.log")
+save_connections(connections, "/var/log/ldap/ldap_sessions.log")
