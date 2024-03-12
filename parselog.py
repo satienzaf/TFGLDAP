@@ -1,6 +1,8 @@
 import re
 from datetime import datetime
 import subprocess
+from ldap3 import Server, Connection, ALL, SUBTREE
+import pandas as pd
 
 # Expresiones regulares para buscar patrones en los mensajes de log
 
@@ -19,9 +21,9 @@ search_pattern = r'conn=(\d+) op=(\d+) SRCH attr=(.*?)$'
 # resultado de conexion
 result_pattern = r'conn=(\d+) op=(\d+) RESULT tag=\d+ err=(\d+) text=(.*)'
 
-
-# Archivo de log
 log_file = "/var/log/ldap/ldap.log"
+
+csv_file = "/var/log/ldap/ldap_sessions.csv"
 
 # Obtener el año actual
 current_year = datetime.now().year
@@ -115,8 +117,56 @@ def process_log(log_file):
                 current_search = None
 
     return connections
+    
+def verify_access(connections):
+    ldap_server = 'ldap://Raton.redldap.es'
+    ldap_user = 'cn=admin,dc=Raton,dc=redldap,dc=es' 
+    ldap_password = 'tfginfo'  # Contraseña del usuario LDAP
+    base_dn = 'ou=people,dc=Raton,dc=Redldap,dc=es'  # Base DN donde se buscará el usuario
+    search_filter = '(uid={})'  # Filtro de búsqueda para el usuario
 
-# Función para guardar la información de las conexiones en un archivo
+    server = Server(ldap_server, get_info=ALL)
+    conn = Connection(server, user=ldap_user, password=ldap_password, auto_bind=True)
+    for conn_data in connections:
+        if conn_data.get("statusUser") == 'LDAP':
+            ip_address = conn_data['ip_address']
+            username = conn_data['username']
+            hostname = subprocess.run(["dig", "-x", ip_address, "+short"], capture_output=True, text=True).stdout.strip()
+            if hostname:
+                conn.search(search_base=base_dn,
+                            search_filter=search_filter.format(username),
+                            search_scope=SUBTREE,
+                            attributes=['host'])
+
+                if conn.entries:
+                    user_hosts = conn.entries[0].host.value
+                    if user_hosts is None:
+                        conn_data['has_access'] = False
+                    elif '*' in user_hosts or user_hosts == ['*'] or hostname in user_hosts:
+                        conn_data['has_access'] = True
+                    else:
+                        conn_data['has_access'] = False
+                else:
+                    conn_data['has_access'] = False
+            else:
+                conn_data['has_access'] = False
+    conn.unbind()
+
+def load_connections(csv_file):
+    try:
+        return pd.read_csv(csv_file)
+        if connections_df.empty:
+            return pd.DataFrame(columns=['conn', 'start_time', 'ip_address', 'username', 'statusUser', 'has_access','codError'])
+        return connections_df
+    except FileNotFoundError:
+        return pd.DataFrame(columns=['conn', 'start_time', 'ip_address', 'username', 'statusUser', 'has_access','codError'])
+
+# Función para guardar la información de las conexiones en un archivo CSV
+def save_connectionscsv(connections, output_file):
+    connections['index'] = range(1, len(connections) + 1)
+    connections.to_csv(output_file, index=False)
+"""
+# Función para guardar la información de las conexiones en un archivo de texto
 def save_connections(connections, output_file):
     with open(output_file, 'w') as file:
         for conn_data in connections:
@@ -127,9 +177,32 @@ def save_connections(connections, output_file):
                 file.write(f"Username: {conn_data['username']}\n")
                 file.write(f"Username existente: {conn_data['statusUser']}\n")
                 if 'codError' in conn_data:
+                    file.write(f"Acceso: {conn_data['has_access']}\n")
                     file.write(f"Código de error: {conn_data['codError']}\n")
                 file.write("\n")
+"""
+
 
 # Procesar el log y guardar la información de las conexiones
 connections = process_log(log_file)
-save_connections(connections, "/var/log/ldap/ldap_sessions.log")
+verify_access(connections)
+#save_connections(connections, "/var/log/ldap/ldap_sessions.log")
+
+connections = [conn_data for conn_data in connections if 'username' in conn_data]
+# Procesar el log y guardar la información de las conexiones
+connections_df = load_connections(csv_file)
+
+last_execution_time = connections_df['start_time'].max() if not connections_df.empty else datetime.min
+
+new_connections_df = pd.DataFrame(connections)
+new_connections_df['start_time'] = pd.to_datetime(new_connections_df['start_time'])
+new_connections_df = new_connections_df[new_connections_df['start_time'] > last_execution_time]
+
+# Guardar las nuevas conexiones en el archivo CSV
+if not new_connections_df.empty:
+    if connections_df.empty:
+        connections_df = new_connections_df
+    else:
+        connections_df = pd.concat([connections_df, new_connections_df], ignore_index=True)
+    save_connectionscsv(connections_df, csv_file)
+
