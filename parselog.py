@@ -142,7 +142,7 @@ def verify_access(connections):
                     user_hosts = conn.entries[0].host.value
                     if user_hosts is None:
                         conn_data['has_access'] = False
-                    elif '*' in user_hosts or user_hosts == ['*'] or hostname in user_hosts:
+                    elif '*' in user_hosts or user_hosts == ['*'] or hostname in user_hosts+ ".redldap.es.":
                         conn_data['has_access'] = True
                     else:
                         conn_data['has_access'] = False
