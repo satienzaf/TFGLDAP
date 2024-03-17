@@ -144,11 +144,11 @@ def verify_access(connections):
                     else:  # sin atributo host
                         conn_data['has_access'] = False
                     
-                    base_dn = 'dc=Raton,dc=Redldap,dc=es' 
-                    search_filter = '(objectClass=*)'
-                    attributes = ['gosaAclEntry', 'cn']
+                    base_dn2 = 'dc=Raton,dc=Redldap,dc=es' 
+                    search_filter2 = '(objectClass=*)'
+                    attributes2 = ['gosaAclEntry', 'cn']
 
-                    conn.search(search_base=base_dn, search_filter=search_filter, attributes=attributes, search_scope=SUBTREE)
+                    conn.search(search_base=base_dn2, search_filter=search_filter2, attributes=attributes2, search_scope=SUBTREE)
                     acl_entries = conn.entries
                     
                     for entry in acl_entries:
