@@ -3,6 +3,7 @@ from datetime import datetime
 import subprocess
 from ldap3 import Server, Connection, ALL, SUBTREE
 import pandas as pd
+import base64
 
 # Expresiones regulares para buscar patrones en los mensajes de log
 
@@ -27,15 +28,6 @@ csv_file = "/var/log/ldap/ldap_sessions.csv"
 
 # Obtener el año actual
 current_year = datetime.now().year
-
-# Saber si un usuario es un usuario local
-def is_local_user(username):
-    try:
-        # Ejecutar el comando `grep` para buscar el nombre de usuario en el archivo `/etc/passwd`
-        subprocess.run(["grep", "-q", f"^{username}:", "/etc/passwd"], check=True)
-        return True  # El usuario es local
-    except subprocess.CalledProcessError:
-        return False  # El usuario no es local
 
 def process_log(log_file):
     with open(log_file, 'r') as file:
@@ -106,10 +98,7 @@ def process_log(log_file):
                                         "start_time": start_time,
                                         "username": uid,
                                     }
-                                    if is_local_user(uid):
-                                        current_search["statusUser"] = "Local"
-                                    else:
-                                        current_search["statusUser"] = "No existe"
+                                    current_search["statusUser"] = "No LDAP"
                                     if conn_id in current_connections:
                                         current_search['ip_address'] = current_connections[conn_id]['ip_address']
                                         connections.append(current_search)
@@ -120,46 +109,80 @@ def process_log(log_file):
     
 def verify_access(connections):
     ldap_server = 'ldap://Raton.redldap.es'
-    ldap_user = 'cn=admin,dc=Raton,dc=redldap,dc=es' 
+    ldap_user = 'cn=admin,dc=Raton,dc=redldap,dc=es'
     ldap_password = 'tfginfo'  # Contraseña del usuario LDAP
     base_dn = 'ou=people,dc=Raton,dc=Redldap,dc=es'  # Base DN donde se buscará el usuario
     search_filter = '(uid={})'  # Filtro de búsqueda para el usuario
 
     server = Server(ldap_server, get_info=ALL)
     conn = Connection(server, user=ldap_user, password=ldap_password, auto_bind=True)
+    
     for conn_data in connections:
-        if conn_data.get("statusUser") == 'LDAP':
+        if 'username' in conn_data:
+            conn_data['admin'] = False
             ip_address = conn_data['ip_address']
             username = conn_data['username']
             hostname = subprocess.run(["dig", "-x", ip_address, "+short"], capture_output=True, text=True).stdout.strip()
+            
             if hostname:
-                conn.search(search_base=base_dn,
-                            search_filter=search_filter.format(username),
-                            search_scope=SUBTREE,
-                            attributes=['host'])
+                conn_data['host'] = hostname
+                
+                if conn_data["statusUser"] == "LDAP":
+                    conn.search(search_base=base_dn,
+                                search_filter=search_filter.format(username),
+                                search_scope=SUBTREE,
+                                attributes=['host'])
 
-                if conn.entries:
-                    user_hosts = conn.entries[0].host.value
-                    if user_hosts is None:
+                    if conn.entries:
+                        user_hosts = conn.entries[0].host.value
+                        if user_hosts is None:  # atributo host vacio
+                            conn_data['has_access'] = False
+                        elif '*' in user_hosts or hostname in user_hosts + ".redldap.es.":
+                            conn_data['has_access'] = True
+                        else:  # atributo host no vacío pero no coincide
+                            conn_data['has_access'] = False
+                    else:  # sin atributo host
                         conn_data['has_access'] = False
-                    elif '*' in user_hosts or user_hosts == ['*'] or hostname in user_hosts+ ".redldap.es.":
-                        conn_data['has_access'] = True
-                    else:
-                        conn_data['has_access'] = False
-                else:
-                    conn_data['has_access'] = False
-            else:
+                    
+                    base_dn = 'dc=Raton,dc=Redldap,dc=es' 
+                    search_filter = '(objectClass=*)'
+                    attributes = ['gosaAclEntry', 'cn']
+
+                    conn.search(search_base=base_dn, search_filter=search_filter, attributes=attributes, search_scope=SUBTREE)
+                    acl_entries = conn.entries
+                    
+                    for entry in acl_entries:
+                        if 'gosaAclEntry' in entry:
+                            for acl_entry in entry['gosaAclEntry']:
+                                acl = base64.b64decode(acl_entry.split(':')[2]).decode('latin-1')
+                                adminACL = "cn=admin,ou=aclroles,dc=Raton,dc=redldap,dc=es"
+                                cadena_uid = base64.b64decode(acl_entry.split(':')[3]).decode('latin-1')
+                                patron = r'uid=([^,]+)'
+                                coincidencias = re.search(patron, cadena_uid)
+                                
+                                if coincidencias:
+                                    uid = coincidencias.group(1)
+                                    if uid == username and acl == adminACL:
+                                        conn_data["admin"] = True
+                                        break  
+                else:  # usuario no LDAP
+                    conn_data['has_access'] = "NA"
+                    conn_data['codError'] = 0
+            else:  # hostname no conocido
+                conn_data['host'] = "Desconocido"
                 conn_data['has_access'] = False
+
     conn.unbind()
+
 
 def load_connections(csv_file):
     try:
         return pd.read_csv(csv_file)
         if connections_df.empty:
-            return pd.DataFrame(columns=['conn', 'start_time', 'ip_address', 'username', 'statusUser', 'has_access','codError'])
+            return pd.DataFrame(columns=['conn', 'start_time', 'ip_address','host', 'username', 'statusUser', 'has_access','codError','admin'])
         return connections_df
     except FileNotFoundError:
-        return pd.DataFrame(columns=['conn', 'start_time', 'ip_address', 'username', 'statusUser', 'has_access','codError'])
+        return pd.DataFrame(columns=['conn', 'start_time', 'ip_address', 'host','username', 'statusUser', 'has_access','codError','admin'])
 
 # Función para guardar la información de las conexiones en un archivo CSV
 def save_connectionscsv(connections, output_file):
@@ -195,8 +218,9 @@ connections_df = load_connections(csv_file)
 last_execution_time = connections_df['start_time'].max() if not connections_df.empty else datetime.min
 
 new_connections_df = pd.DataFrame(connections)
-new_connections_df['start_time'] = pd.to_datetime(new_connections_df['start_time'])
-new_connections_df = new_connections_df[new_connections_df['start_time'] > last_execution_time]
+if not new_connections_df.empty:
+    new_connections_df['start_time'] = pd.to_datetime(new_connections_df['start_time'])
+    new_connections_df = new_connections_df[new_connections_df['start_time'] > last_execution_time]
 
 # Guardar las nuevas conexiones en el archivo CSV
 if not new_connections_df.empty:
