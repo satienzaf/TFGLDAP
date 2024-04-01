@@ -1,4 +1,4 @@
-from flask import jsonify, request
+from flask import jsonify, request, render_template
 
 from app import app
 
@@ -10,19 +10,49 @@ from datetime import datetime
 
 
 
+
+
 # Cargar el archivo CSV en un DataFrame de Pandas
 
 df = pd.read_csv("/var/log/ldap/ldap_sessions.csv")
 
+df = df.sort_values(by='start_time', ascending=True)
 
+
+
+@app.route('/')
+
+def index():
+
+    # Utiliza la función render_template para servir el archivo index.html
+
+    return render_template('index.html')
+
+    
 
 @app.route('/logs', methods=['GET'])
 
 def get_logs():
 
-    logs = df.to_json(orient="records")
+    page = int(request.args.get('page', 1))
 
-    return logs
+    per_page = 10
+
+    start_index = (page - 1) * per_page
+
+    end_index = start_index + per_page
+
+    logs = df[start_index:end_index].to_dict(orient="records")
+
+
+
+    prev_page = page - 1 if start_index > 0 else None
+
+    next_page = page + 1 if end_index < len(df) else None
+
+
+
+    return render_template('all_logs.html', logs=logs, prev_page=prev_page, next_page=next_page)
 
 
 
@@ -32,11 +62,15 @@ def get_latest_logs():
 
     n = int(request.args.get('n', 10))
 
-    latest_logs = df.tail(n).to_dict(orient="records")
+    
 
-    return json.dumps(latest_logs)
+    latest_logs = df.tail(n)[['conn', 'start_time', 'username', 'statusUser', 'ip_address', 'admin', 'host', 'has_access', 'codError']].to_dict(orient="records")
 
+    
 
+    return render_template('latest_logs.html', latest_logs=latest_logs, n_logs=n)
+
+    
 
 @app.route('/logs/filter', methods=['GET'])
 
@@ -90,7 +124,7 @@ def filter_logs():
 
 
 
-    return json.dumps(filtered_logs)
+    return render_template('filter_logs.html', filtered_logs=filtered_logs)
 
     
 
@@ -100,17 +134,9 @@ def filter_logs_by_ip():
 
     ip_address = request.args.get('ip')
 
-
-
-    if not ip_address:
-
-        return json.dumps({'error': 'Please provide an IP address parameter'}), 400
-
-
-
     ip_logs = df[df['ip_address'] == ip_address].to_dict(orient='records')
 
-    return json.dumps(ip_logs)
+    return render_template('filter_logs_by_ip.html', ip_logs=ip_logs)
 
 
 
@@ -148,7 +174,7 @@ def filter_logs_by_host():
 
     host_logs = df[df['host'] == host].to_dict(orient='records')
 
-    return json.dumps(host_logs)
+    return render_template('filter_logs_by_host.html', host_logs=host_logs)
 
     
 
@@ -160,15 +186,9 @@ def filter_logs_by_status():
 
 
 
-    if not status:
-
-        return json.dumps({'error': 'Please provide a status parameter'}), 400
-
-
-
     status_logs = df[df['statusUser'] == status].to_dict(orient='records')
 
-    return json.dumps(status_logs) 
+    return render_template('filter_logs_by_status.html', status_logs=status_logs)
 
     
 
@@ -208,7 +228,7 @@ def filter_logs_by_access():
 
 
 
-    return json.dumps(access_logs)
+    return render_template('filter_logs_by_access.html', access_logs=access_logs)
 
     
 
@@ -226,7 +246,7 @@ def filter_logs_by_error():
 
         error_logs = df[df['codError'] > 0].to_dict(orient='records')
 
-        return json.dumps(error_logs)
+        return render_template('filter_logs_by_error.html', error_logs=error_logs)
 
 
 
@@ -234,7 +254,7 @@ def filter_logs_by_error():
 
     error_logs = df[df['codError'] == int(error_code)].to_dict(orient='records')
 
-    return json.dumps(error_logs)
+    return render_template('filter_logs_by_error.html', error_logs=error_logs)
 
     
 
@@ -264,7 +284,7 @@ def filter_logs_by_admin():
 
         return json.dumps({'error': 'Invalid value for admin parameter'}), 400
 
-    return json.dumps(admin_logs)
+    return render_template('filter_logs_by_admin.html', admin_logs=admin_logs)
 
     
 
@@ -312,7 +332,7 @@ def get_user_statistics():
 
     user_stats = filtered_df['username'].value_counts().to_dict()
 
-    return json.dumps(user_stats)
+    return render_template('user_statistics_logs.html', user_stats=user_stats)
 
 
 
@@ -358,5 +378,4 @@ def get_ip_statistics():
 
     ip_stats = filtered_df['ip_address'].value_counts().to_dict()
 
-    return json.dumps(ip_stats)
-
+    return render_template('ip_statistics_logs.html', ip_stats=ip_stats)
