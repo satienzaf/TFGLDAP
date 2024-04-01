@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Filtered Logs by Error</title>
+
+</head>
+
+<body>
+
+    <h1>Logs filtrados por código de error</h1>
+
+    <a href="/">Volver a la página de inicio</a>  
+
+    <form action="/logs/filter/error" method="GET">
+
+        <label for="error_code">Código de error:</label>
+
+        <input type="number" id="error_code" name="error">
+
+        <button type="submit">Filtrar</button>
+
+    </form>
+
+    <div id="filtered_logs">
+
+        {% if error_logs %}
+
+        <table>
+
+            <thead>
+
+                <tr>
+
+                    <th>Conexión</th>
+
+                    <th>Fecha de inicio</th>
+
+                    <th>Dirección IP</th>
+
+                    <th>Host</th>
+
+                    <th>Usuario</th>
+
+                    <th>Estado de Usuario</th>
+
+                    <th>Tiene Acceso</th>
+
+                    <th>Código de Error</th>
+
+                    <th>Es Admin</th>
+
+                </tr>
+
+            </thead>
+
+            <tbody>
+
+                {% for log in error_logs|reverse %}
+
+                <tr>
+
+                    <td>{{ log['conn'] }}</td>
+
+                    <td>{{ log['start_time'] }}</td>
+
+                    <td>{{ log['ip_address'] }}</td>
+
+                    <td>{{ log['host'] }}</td>
+
+                    <td>{{ log['username'] }}</td>
+
+                    <td>{{ log['statusUser'] }}</td>
+
+                    <td>{{ log['has_access'] }}</td>
+
+                    <td>{{ log['codError'] }}</td>
+
+                    <td>{{ log['admin'] }}</td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+        {% else %}
+
+        <p>No se encontraron registros para el código de error seleccionado.</p>
+
+        {% endif %}
+
+    </div>
+
+</body>
+
+</html>
+
