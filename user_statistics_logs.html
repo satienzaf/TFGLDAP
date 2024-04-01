@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>User Statistics</title>
+
+</head>
+
+<body>
+
+    <h1>Estadísticas de usuarios</h1>
+
+    <a href="/">Volver a la página de inicio</a>  
+
+    <form action="/logs/user_statistics" method="GET">
+
+        <label for="day">Día:</label>
+
+        <input type="number" id="day" name="day" min="1" max="31">
+
+        <label for="month">Mes:</label>
+
+        <input type="number" id="month" name="month" min="1" max="12">
+
+        <label for="year">Año:</label>
+
+        <input type="number" id="year" name="year" min="1970" max="2100">
+
+        <button type="submit">Obtener estadísticas</button>
+
+    </form>
+
+    <div id="user_stats">
+
+        <h2>Estadísticas de usuarios</h2>
+
+        <ul>
+
+            {% for user, count in user_stats.items() %}
+
+            <li>{{ user }}: {{ count }}</li>
+
+            {% endfor %}
+
+        </ul>
+
+    </div>
+
+</body>
+
+</html>
+
