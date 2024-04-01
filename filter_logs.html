@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>All Logs</title>
+
+</head>
+
+<body>
+
+    <h1>Todos los Logs</h1>
+
+    <a href="/">Volver a la página de inicio</a>
+
+    <table>
+
+        <thead>
+
+            <tr>
+
+                <th>Conexión</th>
+
+                <th>Fecha de inicio</th>
+
+                <th>Dirección IP</th>
+
+                <th>Host</th>
+
+                <th>Usuario</th>
+
+                <th>Estado de Usuario</th>
+
+                <th>Tiene Acceso</th>
+
+                <th>Código de Error</th>
+
+                <th>Es Admin</th>
+
+            </tr>
+
+        </thead>
+
+        <tbody>
+
+            {% for log in logs %}
+
+            <tr>
+
+                <td>{{ log['conn'] }}</td>
+
+                <td>{{ log['start_time'] }}</td>
+
+                <td>{{ log['ip_address'] }}</td>
+
+                <td>{{ log['host'] }}</td>
+
+                <td>{{ log['username'] }}</td>
+
+                <td>{{ log['statusUser'] }}</td>
+
+                <td>{{ log['has_access'] }}</td>
+
+                <td>{{ log['codError'] }}</td>
+
+                <td>{{ log['admin'] }}</td>
+
+            </tr>
+
+            {% endfor %}
+
+        </tbody>
+
+    </table>
+
+
+
+    <div class="pagination">
+
+        {% if prev_page %}
+
+            <a href="{{ url_for('get_logs', page=prev_page) }}">Anterior</a>
+
+        {% endif %}
+
+        {% if next_page %}
+
+            <a href="{{ url_for('get_logs', page=next_page) }}">Siguiente</a>
+
+        {% endif %}
+
+    </div>
+
+</body>
+
+</html>
