@@ -6,7 +6,8 @@ En este repositorio se encuentran los siguientes archivos:
    2.1 Archivos HTML: archivos necesarios para la visualización de la interfaz web
    2.2 Run.py e init.py: archivos que ejecutan y ponen en funcionamiento el REST API
    2.3 Routes.py: archivo que contiene todos los endpoints del REST API
-   2.4 Styles.css: hoja de estilos de la interfaz gráfica
+   2.4 Requirements.txt: archivo que contiene todas las instalaciones necesarias en Python para el funcionamiento de la API
+   2.5 Styles.css: hoja de estilos de la interfaz gráfica
 Los archivos anteriores siguen la siguiente estructura de carpetas:
 APIrest/
 │
