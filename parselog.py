@@ -29,6 +29,8 @@ csv_file = "/var/log/ldap/ldap_sessions.csv"
 # Obtener el año actual
 current_year = datetime.now().year
 
+#procesar archivo línea por línea detectando los patrones de conexiones
+
 def process_log(log_file):
     with open(log_file, 'r') as file:
         lines = file.readlines()
@@ -45,6 +47,7 @@ def process_log(log_file):
         login_match = re.search(login_pattern, line)
         search_match = re.search(search_pattern, line)
 
+        #añadimos conexion a conexiones abiertas y extraemos sus datos
         if conn_start_match:
             conn_id = conn_start_match.group(1)
             ip_address = conn_start_match.group(2)
@@ -57,6 +60,7 @@ def process_log(log_file):
             }
             current_connections[conn_id] = current_connection
             login_detected = False
+        #guardamos la conexión actuales en conexiones tras finalizar la misma
         elif conn_end_match:
             conn_id = conn_end_match.group(1)
             if conn_id in current_connections:
@@ -69,6 +73,7 @@ def process_log(log_file):
                 connections.append(current_connections[conn_id])
                 del current_connections[conn_id]  # Eliminar la conexión del diccionario
                 login_detected = False
+        #guardamos los datos del bind en conexiones actuales
         elif login_match:
             conn_id = login_match.group(1)
             username = login_match.group(3)
@@ -81,7 +86,7 @@ def process_log(log_file):
             if not current_search:  # ya que una búsqueda de usuario se realiza dos veces
                 if i < len(lines) - 1:
                     next_line = lines[i + 1]
-                    match_nentries = re.search(r"nentries=(\d+)", next_line)
+                    match_nentries = re.search(r"nentries=(\d+)", next_line) #nentries devuelve el número de entradas devueltas por el servidor ldap
                     if match_nentries:
                         nentries = match_nentries.group(1)
                         if nentries == '0':  # usuario no existente en LDAP
@@ -106,11 +111,11 @@ def process_log(log_file):
                 current_search = None
 
     return connections
-    
+#comprueba los permisos de acceso del usuario al host al que ha accedido    
 def verify_access(connections):
     ldap_server = 'ldap://Raton.redldap.es'
     ldap_user = 'cn=admin,dc=Raton,dc=redldap,dc=es'
-    ldap_password = 'tfginfo'  # Contraseña del usuario LDAP
+    ldap_password = 'tfginfo'  # Contraseña del usuario admin LDAP
     base_dn = 'ou=people,dc=Raton,dc=Redldap,dc=es'  # Base DN donde se buscará el usuario
     search_filter = '(uid={})'  # Filtro de búsqueda para el usuario
 
@@ -122,7 +127,7 @@ def verify_access(connections):
             conn_data['admin'] = False
             ip_address = conn_data['ip_address']
             username = conn_data['username']
-            hostname = subprocess.run(["dig", "-x", ip_address, "+short"], capture_output=True, text=True).stdout.strip()
+            hostname = subprocess.run(["dig", "-x", ip_address, "+short"], capture_output=True, text=True).stdout.strip() #obtenemos hostname a partir de IP
             
             if hostname:
                 conn_data['host'] = hostname
@@ -131,13 +136,13 @@ def verify_access(connections):
                     conn.search(search_base=base_dn,
                                 search_filter=search_filter.format(username),
                                 search_scope=SUBTREE,
-                                attributes=['host'])
+                                attributes=['host']) #buscamos atributo host del usuario
 
                     if conn.entries:
                         user_hosts = conn.entries[0].host.value
                         if user_hosts is None:  # atributo host vacio
                             conn_data['has_access'] = False
-                        elif '*' in user_hosts or hostname in user_hosts + ".redldap.es.":
+                        elif '*' in user_hosts or hostname in user_hosts + ".redldap.es.": #coincide o tiene pleno acceso ('*')
                             conn_data['has_access'] = True
                         else:  # atributo host no vacío pero no coincide
                             conn_data['has_access'] = False
@@ -148,13 +153,13 @@ def verify_access(connections):
                     search_filter2 = '(objectClass=*)'
                     attributes2 = ['gosaAclEntry', 'cn']
 
-                    conn.search(search_base=base_dn2, search_filter=search_filter2, attributes=attributes2, search_scope=SUBTREE)
+                    conn.search(search_base=base_dn2, search_filter=search_filter2, attributes=attributes2, search_scope=SUBTREE) #buscamos acl de administradores
                     acl_entries = conn.entries
                     
                     for entry in acl_entries:
                         if 'gosaAclEntry' in entry:
                             for acl_entry in entry['gosaAclEntry']:
-                                acl = base64.b64decode(acl_entry.split(':')[2]).decode('latin-1')
+                                acl = base64.b64decode(acl_entry.split(':')[2]).decode('latin-1') #decodificamos la acl ya que por defectoe stá encriptada
                                 adminACL = "cn=admin,ou=aclroles,dc=Raton,dc=redldap,dc=es"
                                 cadena_uid = base64.b64decode(acl_entry.split(':')[3]).decode('latin-1')
                                 patron = r'uid=([^,]+)'
@@ -162,7 +167,7 @@ def verify_access(connections):
                                 
                                 if coincidencias:
                                     uid = coincidencias.group(1)
-                                    if uid == username and acl == adminACL:
+                                    if uid == username and acl == adminACL: #usuario está en la acl, por tanto es admin
                                         conn_data["admin"] = True
                                         break  
                 else:  # usuario no LDAP
@@ -174,7 +179,7 @@ def verify_access(connections):
 
     conn.unbind()
 
-
+#cargamos conexiones desde el csv
 def load_connections(csv_file):
     try:
         return pd.read_csv(csv_file)
@@ -184,7 +189,7 @@ def load_connections(csv_file):
     except FileNotFoundError:
         return pd.DataFrame(columns=['conn', 'start_time', 'ip_address', 'host','username', 'statusUser', 'has_access','codError','admin'])
 
-# Función para guardar la información de las conexiones en un archivo CSV
+# guardamos conexiones en csv
 def save_connectionscsv(connections, output_file):
     connections['index'] = range(1, len(connections) + 1)
     connections.to_csv(output_file, index=False)
